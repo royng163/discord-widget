@@ -79,7 +79,7 @@ def get_number(data, name):
 
 
 def best_ai_agent_by_cost(stats):
-    agents = stats.get("ai_agent_breakdown") or []
+    agents = stats.get("ai_model_breakdown") or []
     if not agents:
         return "Unknown \u00b7 0 LOC"
 
@@ -219,7 +219,7 @@ def build_discord_payload(stats, code_time, total_lines):
                 text("stat_4_value", "Favourite AI Agent"),
                 text("stat_5_name", tokens),
                 text("stat_5_value", "Weekly Tokens"),
-                text("stat_6_name", f"${get_number(stats, 'ai_agent_total_cost'):,.0f} est."),
+                text("stat_6_name", f"${get_number(stats, 'ai_model_total_cost'):,.0f} est."),
                 text("stat_6_value", "Weekly Cost"),
                 text("stat_mini_profile", daily_average),
                 text("stat_activity_accessory", daily_average),
