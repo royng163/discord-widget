@@ -20,7 +20,6 @@ IMAGE_FILENAME = "profile.gif"
 
 
 def default_image_url():
-    # In GitHub Actions the repo/branch are known, so the committed image URL builds itself.
     repo = os.environ.get("GITHUB_REPOSITORY")
     branch = os.environ.get("GITHUB_REF_NAME", "main")
     if repo:
@@ -28,9 +27,7 @@ def default_image_url():
     return ""
 
 
-# Personalization comes from the environment so the repo itself stays generic.
-# PROFILE_README_URL: raw URL of a profile README carrying waka-readme-stats badges;
-# the all-time coding time and total lines are reused from it (no GitHub token needed).
+# PROFILE_README_URL: raw profile README with waka-readme-stats badges (all-time stats).
 PROFILE_README_URL = os.environ.get("PROFILE_README_URL", "")
 PROFILE_IMAGE_URL = os.environ.get("PROFILE_IMAGE_URL") or default_image_url()
 TITLE = os.environ.get("TITLE", "")
@@ -69,34 +66,43 @@ def compact_number(value):
     return str(value)
 
 
-def compact_lower_number(value):
-    return compact_number(value).lower()
-
-
 def get_number(data, name):
     value = data.get(name, 0)
     return value if isinstance(value, (int, float)) else 0
 
 
+# WakaTime prices each model name by a default version (wakatime.com/faq#ai-model-cost).
+# static map, update when WakaTime changes its default versions.
+AI_MODEL_VERSIONS = {
+    "Opus": "4.8",
+    "Sonnet": "4.6",
+    "Haiku": "4.5",
+    "GPT": "5.6",
+    "Gemini": "3.1-pro",
+    "Grok": "4.5",
+    "Qwen": "3.7-max",
+}
+
+
+def model_display_name(name):
+    version = AI_MODEL_VERSIONS.get(name)
+    return f"{name} {version}" if version else name
+
+
 def best_ai_agent_by_cost(stats):
     agents = stats.get("ai_model_breakdown") or []
     if not agents:
-        return "Unknown \u00b7 0 LOC"
+        return "Unknown"
 
     agent = max(agents, key=lambda item: get_number(item, "cost"))
-    return f"{agent.get('name', 'Unknown')} \u00b7 {compact_lower_number(get_number(agent, 'lines'))} LOC"
+    return model_display_name(agent.get("name", "Unknown"))
 
 
 _MAGNITUDE = {"thousand": "K", "million": "M", "billion": "B"}
 
 
 def parse_profile_badges(readme_text):
-    """Pull all-time coding time and total lines from the waka-readme-stats badges.
-
-    Those are rendered as shields.io badges of the form
-    /badge/{label}-{message}-{color}, so the value sits between the label's
-    trailing '-' and the color's leading '-'.
-    """
+    """Pull all-time coding time and total lines from waka-readme-stats shields.io badges."""
     code_time = "∞ Hours"
     total_lines = "∞ Lines"
 
