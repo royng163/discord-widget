@@ -18,6 +18,12 @@ jobs:
       DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
       DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
       DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      PROFILE_README_URL: ${{ vars.PROFILE_README_URL }}
+      PROFILE_IMAGE_URL: ${{ vars.PROFILE_IMAGE_URL }}
+      TITLE: ${{ vars.TITLE }}
+      SUBTITLE_1: ${{ vars.SUBTITLE_1 }}
+      SUBTITLE_2: ${{ vars.SUBTITLE_2 }}
+      SUBTITLE_3: ${{ vars.SUBTITLE_3 }}
 
     steps:
       - name: Checkout

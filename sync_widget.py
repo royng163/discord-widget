@@ -1,10 +1,12 @@
 import base64
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import unquote
 
 
 WAKATIME_STATS_URL = "https://api.wakatime.com/api/v1/users/current/stats/last_7_days"
@@ -13,6 +15,28 @@ DISCORD_PROFILE_URL = (
     "/users/{user_id}/identities/0/profile"
 )
 REQUEST_TIMEOUT_SECONDS = 30
+
+IMAGE_FILENAME = "profile.gif"
+
+
+def default_image_url():
+    # In GitHub Actions the repo/branch are known, so the committed image URL builds itself.
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    branch = os.environ.get("GITHUB_REF_NAME", "main")
+    if repo:
+        return f"https://raw.githubusercontent.com/{repo}/{branch}/{IMAGE_FILENAME}"
+    return ""
+
+
+# Personalization comes from the environment so the repo itself stays generic.
+# PROFILE_README_URL: raw URL of a profile README carrying waka-readme-stats badges;
+# the all-time coding time and total lines are reused from it (no GitHub token needed).
+PROFILE_README_URL = os.environ.get("PROFILE_README_URL", "")
+PROFILE_IMAGE_URL = os.environ.get("PROFILE_IMAGE_URL") or default_image_url()
+TITLE = os.environ.get("TITLE", "")
+SUBTITLE_1 = os.environ.get("SUBTITLE_1", "")
+SUBTITLE_2 = os.environ.get("SUBTITLE_2", "")
+SUBTITLE_3 = os.environ.get("SUBTITLE_3", "")
 
 
 def log_step(message):
@@ -63,11 +87,50 @@ def best_ai_agent_by_cost(stats):
     return f"{agent.get('name', 'Unknown')} \u00b7 {compact_lower_number(get_number(agent, 'lines'))} LOC"
 
 
-def format_peak_hours(stats):
-    best_day = stats.get("best_day") or {}
-    total_seconds = get_number(best_day, "total_seconds")
-    peak_hours = int((total_seconds + 3599) // 3600) if total_seconds else 0
-    return f"{peak_hours}h+ peak"
+_MAGNITUDE = {"thousand": "K", "million": "M", "billion": "B"}
+
+
+def parse_profile_badges(readme_text):
+    """Pull all-time coding time and total lines from the waka-readme-stats badges.
+
+    Those are rendered as shields.io badges of the form
+    /badge/{label}-{message}-{color}, so the value sits between the label's
+    trailing '-' and the color's leading '-'.
+    """
+    code_time = "∞ Hours"
+    total_lines = "∞ Lines"
+
+    match = re.search(r"Code%20Time-([^-]+)-", readme_text)
+    if match:
+        code_time = unquote(match.group(1)).strip()
+
+    match = re.search(r"Written-([^-]+)-blue", readme_text)
+    if match:
+        text = unquote(match.group(1)).strip()
+        num = re.search(r"(\d[\d.]*)\s*(thousand|million|billion)?", text)
+        if num:
+            suffix = _MAGNITUDE.get(num.group(2), "")
+            total_lines = f"{num.group(1)}{suffix} Lines"
+
+    return code_time, total_lines
+
+
+def request_text(url):
+    request = urllib.request.Request(url, headers={"User-Agent": "Discord WakaTime Widget"})
+    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        return response.read().decode("utf-8")
+
+
+def fetch_profile_badges():
+    if not PROFILE_README_URL:
+        log_step("No PROFILE_README_URL set, using placeholders for all-time stats")
+        return parse_profile_badges("")
+    log_step("Fetching profile README for all-time stats")
+    try:
+        return parse_profile_badges(request_text(PROFILE_README_URL))
+    except (urllib.error.URLError, OSError) as error:
+        log_step(f"Profile README fetch failed, using placeholders: {error}")
+        return parse_profile_badges("")
 
 
 def request_json(url, headers, method="GET", body=None):
@@ -128,43 +191,44 @@ def fetch_wakatime_stats(api_key):
     raise RuntimeError("WakaTime stats are still pending_update after retries")
 
 
-def build_discord_payload(stats):
+def build_discord_payload(stats, code_time, total_lines):
     log_step("Building Discord widget payload from WakaTime stats")
+
+    daily_average = f"Daily Average: {stats.get('human_readable_daily_average', '')}"
+    tokens = (
+        f"{compact_number(get_number(stats, 'ai_input_tokens'))} in "
+        f"\u00b7 {compact_number(get_number(stats, 'ai_output_tokens'))} out"
+    )
+
+    def text(name, value):
+        return {"type": 1, "name": name, "value": value}
+
+    def image(name, url):
+        return {"type": 3, "name": name, "value": {"url": url}}
 
     return {
         "data": {
             "dynamic": [
-                {"type": 1, "name": "stat_1_name", "value": "WakaTime"},
-                {"type": 1, "name": "stat_1_value", "value": "Activity Overview"},
-                {"type": 1, "name": "stat_2_name", "value": "7 Days"},
-                {
-                    "type": 1,
-                    "name": "stat_2_value",
-                    "value": stats.get("human_readable_total", ""),
-                },
-                {"type": 1, "name": "stat_3_name", "value": "Daily Average"},
-                {
-                    "type": 1,
-                    "name": "stat_3_value",
-                    "value": f"{stats.get('human_readable_daily_average', '')} \u00b7 {format_peak_hours(stats)}",
-                },
-                {"type": 1, "name": "stat_4_name", "value": "AI Coding"},
-                {"type": 1, "name": "stat_4_value", "value": best_ai_agent_by_cost(stats)},
-                {"type": 1, "name": "stat_5_name", "value": "Tokens"},
-                {
-                    "type": 1,
-                    "name": "stat_5_value",
-                    "value": (
-                        f"{compact_number(get_number(stats, 'ai_input_tokens'))} in "
-                        f"\u00b7 {compact_number(get_number(stats, 'ai_output_tokens'))} out"
-                    ),
-                },
-                {"type": 1, "name": "stat_6_name", "value": "Cost"},
-                {
-                    "type": 1,
-                    "name": "stat_6_value",
-                    "value": f"${get_number(stats, 'ai_agent_total_cost'):,.0f} est.",
-                },
+                text("stat_1_name", code_time),
+                text("stat_1_value", "Total Time Coded"),
+                text("stat_2_name", stats.get("human_readable_total", "")),
+                text("stat_2_value", "Weekly Coded"),
+                text("stat_3_name", total_lines),
+                text("stat_3_value", "Total Line Written"),
+                text("stat_4_name", best_ai_agent_by_cost(stats)),
+                text("stat_4_value", "Favourite AI Agent"),
+                text("stat_5_name", tokens),
+                text("stat_5_value", "Weekly Tokens"),
+                text("stat_6_name", f"${get_number(stats, 'ai_agent_total_cost'):,.0f} est."),
+                text("stat_6_value", "Weekly Cost"),
+                text("stat_mini_profile", daily_average),
+                text("stat_activity_accessory", daily_average),
+                text("subtitle_1", SUBTITLE_1),
+                text("subtitle_2", SUBTITLE_2),
+                text("subtitle_3", SUBTITLE_3),
+                image("image_top", PROFILE_IMAGE_URL),
+                image("image_mini", PROFILE_IMAGE_URL),
+                text("title", TITLE),
             ]
         }
     }
@@ -191,10 +255,21 @@ def patch_discord_profile(application_id, user_id, bot_token, payload):
     return status, response
 
 
+def demo():
+    badge = (
+        "![Code Time](http://img.shields.io/badge/Code%20Time-1%2C375%20hrs-blue?style=flat)\n"
+        "![Lines of code](https://img.shields.io/badge/From%20Hello%20World%20I%27ve%20Written-2.03%20million%20lines%20of%20code-blue?style=flat)"
+    )
+    assert parse_profile_badges(badge) == ("1,375 hrs", "2.03M Lines"), parse_profile_badges(badge)
+    assert parse_profile_badges("") == ("∞ Hours", "∞ Lines")
+    print("selftest ok")
+
+
 def main():
     log_step("Starting Discord WakaTime widget sync")
     stats = fetch_wakatime_stats(require_env("WAKATIME_API_KEY"))
-    payload = build_discord_payload(stats)
+    code_time, total_lines = fetch_profile_badges()
+    payload = build_discord_payload(stats, code_time, total_lines)
 
     print_json("Discord payload", payload)
 
@@ -208,6 +283,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        demo()
+        sys.exit(0)
     try:
         main()
     except Exception as error:
