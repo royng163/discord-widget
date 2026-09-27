@@ -74,13 +74,13 @@ def get_number(data, name):
 # WakaTime prices each model name by a default version (wakatime.com/faq#ai-model-cost).
 # static map, update when WakaTime changes its default versions.
 AI_MODEL_VERSIONS = {
-    "Opus": "5",
-    "Sonnet": "5",
-    "Haiku": "4.5",
-    "GPT": "5.6",
+    "Opus": "5.5",
+    "Sonnet": "5.5",
+    "Haiku": "5.5",
+    "GPT": "5.6-sol",
     "Gemini": "3.1-pro",
-    "Grok": "4.5",
-    "Qwen": "3.7-max",
+    "Grok": "4.6",
+    "Qwen": "3.8-max",
 }
 
 
