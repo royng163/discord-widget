@@ -165,10 +165,9 @@ def request_json(url, headers, method="GET", body=None):
 
 
 def fetch_wakatime_stats(api_key):
-    log_step("Preparing WakaTime Basic Auth header")
-    basic = base64.b64encode(api_key.encode("utf-8")).decode("ascii")
+    log_step("Preparing WakaTime Bearer header")
     headers = {
-        "Authorization": f"Basic {basic}",
+        "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
         "User-Agent": "Discord WakaTime Widget",
     }
