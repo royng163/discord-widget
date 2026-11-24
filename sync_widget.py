@@ -77,8 +77,8 @@ AI_MODEL_VERSIONS = {
     "Opus": "5.5",
     "Sonnet": "5.5",
     "Haiku": "5.5",
-    "GPT": "6.1 Sol",
-    "Gemini": "4 Argon",
+    "GPT": "6.2 Sol",
+    "Gemini": "4 Neon",
     "Grok": "4.7",
     "Qwen": "3.8",
     "DeepSeek": "V4.1 Flash"
